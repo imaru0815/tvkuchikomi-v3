@@ -180,7 +180,21 @@ function App(){
       {view==='admin' && <div className="grid"><section className="card">
   <h2>番組表CSV取り込み</h2>
   <p className="help">CSV形式：date,time,title,station,genre,episodeTitle</p>
+
+  <label>CSVファイルを選択</label>
+  <input
+    type="file"
+    accept=".csv,text/csv"
+    onChange={async e=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      const text = await file.text();
+      setGuideCsv(text);
+    }}
+  />
+
   <form onSubmit={importGuideCsv}>
+    <label>またはCSVを貼り付け</label>
     <textarea
       value={guideCsv}
       onChange={e=>setGuideCsv(e.target.value)}
