@@ -25,6 +25,59 @@ const fmt = n => n ? n.toFixed(1) : '-';
 const getLS = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key) || JSON.stringify(fallback)); } catch { return fallback; } };
 const setLS = (key, value) => localStorage.setItem(key, JSON.stringify(value));
 
+
+const GUIDE_STORAGE_KEY = 'tv_program_guide_v1';
+
+function parseGuideCsv(text){
+  const lines = text.trim().split(/\r?\n/).filter(Boolean);
+  const body = lines[0]?.includes('date') ? lines.slice(1) : lines;
+  return body.map((line, idx) => {
+    const cols = line.split(',').map(v => v.trim().replace(/^"|"$|^'|'$/g, ''));
+    const [date, time, title, station, genre='未分類', episodeTitle=''] = cols;
+    if(!date || !time || !title || !station) return null;
+    const id = `import_${slug(title)}_${idx}`;
+    return {
+      id,
+      title,
+      station,
+      genre,
+      episodes: [{
+        id: `episode_${slug(title)}_${date}_${time.replace(':','')}`,
+        program_id: id,
+        date,
+        time,
+        title: episodeTitle || `${dateLabel(date)}放送回`
+      }]
+    };
+  }).filter(Boolean);
+}
+
+function loadImportedGuide(){
+  try {
+    const raw = localStorage.getItem(GUIDE_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function mergePrograms(basePrograms, importedPrograms){
+  const map = new Map();
+  [...basePrograms, ...importedPrograms].forEach(p => {
+    const key = `${p.title}_${p.station}`;
+    if(!map.has(key)){
+      map.set(key, { ...p, episodes: [...p.episodes] });
+    }else{
+      const current = map.get(key);
+      current.episodes.push(...p.episodes);
+      current.episodes = current.episodes
+        .filter((e, i, arr) => arr.findIndex(x => x.id === e.id) === i)
+        .sort((a,b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
+    }
+  });
+  return [...map.values()];
+}
+
 function buildPrograms(){
   const today = new Date(); today.setHours(0,0,0,0);
   const map = new Map();
@@ -82,6 +135,25 @@ function App(){
     if(hasSupabase){ await supabase.from('reviews').update({likes:nextLikes}).eq('id',review.id); await loadReviews(); }
     else saveLocal(reviews.map(r=>r.id===review.id?{...r,likes:nextLikes}:r));
   }
+  function importGuideCsv(e){
+    e.preventDefault();
+    const imported = parseGuideCsv(guideCsv);
+    if(!imported.length){
+      alert('取り込める番組がありません。CSV形式を確認してください。');
+      return;
+    }
+    localStorage.setItem(GUIDE_STORAGE_KEY, JSON.stringify(imported));
+    setPrograms(buildPrograms());
+    setGuideCsv('');
+    alert(`${imported.length}件の番組表を取り込みました。`);
+  }
+
+  function clearGuideCsv(){
+    if(!confirm('取り込んだ番組表を削除しますか？')) return;
+    localStorage.removeItem(GUIDE_STORAGE_KEY);
+    setPrograms(buildPrograms());
+  }
+
   function addProgram(e){
     e.preventDefault(); const fd = new FormData(e.currentTarget); const title=fd.get('title').trim(); const station=fd.get('station').trim();
     if(!title || !station) return alert('番組名と系列・局を入力してください。');
