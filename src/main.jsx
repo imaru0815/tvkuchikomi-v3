@@ -90,7 +90,8 @@ function buildPrograms(){
       map.get(id).episodes.push({ id:`e_${slug(title)}_${date}`, program_id:id, date, time, title:`${dateLabel(date)}放送回` });
     });
   }
-  return [...map.values()].map(p => ({ ...p, episodes:p.episodes.sort((a,b)=>`${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)) }));
+  const basePrograms = [...map.values()].map(p => ({ ...p, episodes:p.episodes.sort((a,b)=>`${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)) }));
+  return mergePrograms(basePrograms, loadImportedGuide());
 }
 
 function App(){
@@ -103,6 +104,7 @@ function App(){
   const [search,setSearch] = React.useState('');
   const [filter,setFilter] = React.useState('');
   const [revealed,setRevealed] = React.useState({});
+  const [guideCsv,setGuideCsv] = React.useState('');
 
   React.useEffect(()=>{ loadReviews(); },[]);
   React.useEffect(()=>{ setLS('tv_liked_v3', liked); },[liked]);
@@ -175,7 +177,19 @@ function App(){
       {view==='post' && <div className="grid"><section className="card"><h2>口コミを書く</h2>{selected && <div className="selected">選択中：{selected.program.title} ／ {selected.episode.date} {selected.episode.time}</div>}<label>番組検索</label><div className="search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="例：水曜日、情熱大陸、報道"/></div>{search && <div className="suggest">{programs.filter(p=>`${p.title}${p.station}${p.genre}`.toLowerCase().includes(search.toLowerCase())).slice(0,8).map(p=><button key={p.id} onClick={()=>selectProgram(p)}>{p.title}<span>{p.station} ／ {p.genre}</span></button>)}</div>}<ReviewForm selected={selected} setSelected={setSelected} onSubmit={submitReview}/></section><aside className="card"><h2>候補番組</h2>{programs.slice(0,12).map(p=><ProgramCard key={p.id} program={p} average={avg(programReviews(p.id))} count={programReviews(p.id).length} onClick={()=>selectProgram(p)}/>)}</aside></div>}
       {view==='reviews' && <section className="card"><div className="head"><h2>最新口コミ</h2><span>ネタバレはタップで表示</span></div><input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="番組名・局名・タグで検索"/>{filteredReviews.length ? filteredReviews.map(r=><Review key={r.id} review={r} programs={programs} liked={liked.includes(r.id)} onLike={()=>toggleLike(r)} revealed={revealed[r.id]} onReveal={()=>setRevealed({...revealed,[r.id]:true})}/>) : <Empty text="まだ口コミがありません。"/>}</section>}
       {view==='ranking' && <div className="grid"><Ranking title="神回ランキング" rows={[...ranking].sort((a,b)=>b.average-a.average).slice(0,10)}/><Ranking title="急上昇ランキング" rows={[...ranking].sort((a,b)=>b.score-a.score).slice(0,10)} type="rising"/><Ranking title="口コミ数ランキング" rows={[...ranking].sort((a,b)=>b.count-a.count).slice(0,10)} type="count"/><section className="card"><h2>いいねランキング</h2>{[...reviews].sort((a,b)=>(b.likes||0)-(a.likes||0)).slice(0,10).map((r,i)=><ReviewRank key={r.id} review={r} index={i} programs={programs}/>)}{!reviews.length && <Empty text="まだランキングはありません。"/>}</section></div>}
-      {view==='admin' && <div className="grid"><section className="card"><h2>番組候補に追加</h2><form onSubmit={addProgram}><label>番組名</label><input name="title"/><label>系列・局</label><input name="station"/><label>ジャンル</label><input name="genre"/><label>放送時刻</label><input name="time" placeholder="20:00"/><label>放送回タイトル</label><input name="episodeTitle"/><button className="primary">追加</button></form></section><section className="card"><h2>番組マスター</h2>{programs.map(p=><ProgramCard key={p.id} program={p} average={avg(programReviews(p.id))} count={programReviews(p.id).length}/>)}</section></div>}
+      {view==='admin' && <div className="grid"><section className="card">
+  <h2>番組表CSV取り込み</h2>
+  <p className="help">CSV形式：date,time,title,station,genre,episodeTitle</p>
+  <form onSubmit={importGuideCsv}>
+    <textarea
+      value={guideCsv}
+      onChange={e=>setGuideCsv(e.target.value)}
+      placeholder={'date,time,title,station,genre,episodeTitle\n2026-06-26,20:00,それSnow Manにやらせて下さい,TBS系,バラエティ,6/26(金)放送回'}
+    />
+    <button className="primary">番組表を取り込む</button>
+  </form>
+  <button className="secondary" onClick={clearGuideCsv}>取り込み番組表を削除</button>
+</section><section className="card"><h2>番組候補に追加</h2><form onSubmit={addProgram}><label>番組名</label><input name="title"/><label>系列・局</label><input name="station"/><label>ジャンル</label><input name="genre"/><label>放送時刻</label><input name="time" placeholder="20:00"/><label>放送回タイトル</label><input name="episodeTitle"/><button className="primary">追加</button></form></section><section className="card"><h2>番組マスター</h2>{programs.map(p=><ProgramCard key={p.id} program={p} average={avg(programReviews(p.id))} count={programReviews(p.id).length}/>)}</section></div>}
     </main>
   </>;
 }
